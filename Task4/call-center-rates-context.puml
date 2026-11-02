@@ -1,0 +1,42 @@
+@startuml call-center-rates-context
+!include <C4/C4_Context>
+title Банк «Стандарт» — C4 Context · ставки для кол-центров\nОбщедоступные условия и консультации · MVP
+LAYOUT_TOP_DOWN()
+skinparam backgroundColor #FFFFFF
+skinparam linetype ortho
+skinparam nodesep 220
+skinparam ranksep 150
+skinparam padding 10
+skinparam ArrowFontSize 13
+skinparam maxMessageSize 280
+skinparam wrapWidth 260
+skinparam packageTitleAlignment left
+AddRelTag("async", $lineStyle=DashedLine())
+
+Person(customer, "Клиент", "Уточняет действующие условия и порядок открытия")
+Person(bank_operator, "Оператор банка", "Консультации и обратные звонки по заявкам")
+Person(partner_operator, "Оператор партнёра", "Скачивает файл ставок, проверяет срок и консультирует клиента")
+Person(backoffice, "Кредитный и депозитный бэк-офисы", "Расчёт в XLS, проверка и утверждение условий в пределах прав")
+Person(support, "Поддержка банка", "Контроль применения, разбор задержек и повторная публикация")
+
+System(abs, "АБС", "Источник утверждённых ставок; версии каталога, публикация и контроль доставки")
+System_Ext(call_center, "Система кол-центра банка", "В инфраструктуре банка: локальный каталог, актуальность и консультации")
+System_Ext(partner_files, "SFTP-сервер банка", "Текущий XLSX с публичными ставками; операторам партнёра доступно только чтение")
+
+Lay_R(bank_operator, backoffice)
+Lay_R(backoffice, support)
+Lay_R(support, partner_operator)
+Lay_R(call_center, abs)
+Lay_R(abs, partner_files)
+
+Rel_D(customer, bank_operator, "UC02 · Звонок / обратный звонок", "Телефон")
+Rel_D(customer, partner_operator, "UC03 · Консультация", "Телефон")
+Rel_D(backoffice, abs, "UC01, UC05\nИмпорт, утверждение, отмена", "Desktop UI")
+Rel_D(support, abs, "UC06 · Статус и повтор", "Desktop UI")
+Rel_D(bank_operator, call_center, "UC02, UC06\nУсловия и актуальность", "Web UI")
+Rel_D(partner_operator, partner_files, "UC03, UC06\nСкачивает текущий файл", "SFTP-клиент / SFTP")
+BiRel_R(call_center, abs, "UC04–UC06\nКаталог / подтверждение", "Внутренние события", $tags="async")
+Rel_R(abs, partner_files, "UC04–UC05\nПубликует XLSX", "SFTP", $tags="async")
+
+footer В фокусе — АБС и публикация ставок. SFTP-сервер находится в банке; операторы партнёра подключаются извне с правом чтения.\nПартнёр вручную скачивает и открывает XLSX; срок использования файла проверяет оператор. Пунктир — фоновая публикация.\nБанковский кол-центр использует свой каталог. Индивидуальные условия, заявки и СМС здесь не детализируются.
+@enduml

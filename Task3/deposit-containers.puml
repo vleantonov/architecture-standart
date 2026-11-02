@@ -1,0 +1,123 @@
+@startuml deposit-containers
+!include <C4/C4_Container>
+title Банк «Стандарт» — C4 Containers · текущее состояние и депозитный MVP\nОбщие системы показаны один раз; цвет обозначает изменения
+LAYOUT_TOP_DOWN()
+skinparam backgroundColor #FFFFFF
+skinparam linetype ortho
+skinparam nodesep 180
+skinparam ranksep 320
+skinparam padding 10
+skinparam ArrowFontSize 13
+skinparam maxMessageSize 280
+skinparam wrapWidth 260
+skinparam packageTitleAlignment left
+skinparam legendFontColor #333333
+skinparam legendBackgroundColor #FFFFFF
+skinparam legendBorderColor #CCCCCC
+AddElementTag("new", $bgColor="#28744C", $fontColor="#FFFFFF", $borderColor="#205F3E")
+AddElementTag("changed", $bgColor="#438DD5", $fontColor="#FFFFFF", $borderColor="#3172B1")
+AddRelTag("mvp", $textColor="#205F3E", $lineColor="#28744C")
+AddRelTag("mvp_async", $textColor="#205F3E", $lineColor="#28744C", $lineStyle=DashedLine())
+AddRelTag("current_only", $textColor="#895000", $lineColor="#B16A00", $lineStyle=DottedLine())
+AddRelTag("manual", $lineStyle=DashedLine())
+AddRelTag("delivery", $lineStyle=DashedLine())
+
+Person(customer, "Клиент", "Сейчас: звонок, отделение, платежи онлайн; MVP: заявки на депозиты онлайн")
+Person(operator, "Менеджер кол-центра", "Консультация, обратный звонок и особые условия")
+Person(frontoffice, "Сотрудник отделения", "Идентификация, согласие клиента, открытие и документы")
+Person(deposit_staff, "Депозитный бэк-офис", "Специальная ставка, согласование и обработка заявки")
+Person(credit_staff, "Кредитный бэк-офис", "Базовые ставки и оценка риска")
+
+System_Ext(web, "WEB · Сайт банка", "PHP / React.js\nСейчас: информация; MVP: каталог и форма обращения", $tags="changed")
+System_Ext(call_center, "CC · Система кол-центра", "React / Spring Boot / PostgreSQL\nСейчас: обращения; MVP: заявки сайта, Kafka, статусы", $tags="changed")
+
+System_Boundary(internet_bank, "Интернет-банк") {
+    Container(monolith, "IB1 · Веб-приложение", "ASP.NET MVC 4.5 / .NET Framework 4.5", "Сейчас: платежи и текущие счета; MVP: страницы депозитов; ядро СМС сохраняется", $tags="changed")
+    ContainerDb(bank_db, "IB2 · БД интернет-банка", "MS SQL", "Существующая: профиль, подтверждённый телефон и другие данные")
+    Container(deposits, "IB3 · Сервис депозитов", "C# / поддерживаемый .NET", "Новый: каталог, заявки, СМС-коды, статусы и фоновые обработчики", $tags="new")
+    ContainerDb(deposits_db, "IB4 · БД депозитов", "MS SQL · отдельная БД", "Новая: заявки, согласие, учёт сообщений; проекции ставок, счетов и статусов", $tags="new")
+}
+
+System_Boundary(messaging, "Платформа обмена · новая") {
+    ContainerQueue(kafka, "BUS · Брокер сообщений", "Apache Kafka", "Заявки, события и подтверждения; не единственное хранилище", $tags="new")
+}
+
+System_Boundary(abs, "АБС") {
+    Container(abs_client, "ABS1 · Клиент АБС", "Delphi", "Общие рабочие места отделения и двух бэк-офисов; MVP: ведение ставок и онлайн-заявок", $tags="changed")
+    Container(abs_adapter, "ABS3 · Адаптер АБС", "Java / Spring Boot", "Новый: обмен, ограничение нагрузки Oracle, события и отправка СМС", $tags="new")
+    ContainerDb(abs_db, "ABS2 · БД и бизнес-логика", "Oracle / PL/SQL", "Счета, обращения, депозиты, документы; MVP: справочник ставок, учёт сообщений", $tags="changed")
+}
+
+Boundary(manual_tools, "Инструменты сотрудников", "Текущая работа") {
+    Container(excel, "Подготовка ставок", "Microsoft Excel / XLS", "Сейчас: базовые и специальные ставки; MVP: подготовка и импорт в АБС")
+    System_Ext(mail, "Электронная почта", "Сейчас: ставки, риск и условия; в MVP не является источником согласования")
+}
+
+System_Ext(sms_gateway, "SMS · СМС-шлюз", "Общий канал кодов и уведомлений")
+System_Ext(telecom, "TEL · Телеком-оператор", "Доставка СМС клиенту")
+
+' Общая раскладка и оформление — по образцу CinemaAbyss.
+Lay_R(customer, operator)
+Lay_R(operator, frontoffice)
+Lay_R(frontoffice, deposit_staff)
+Lay_R(deposit_staff, credit_staff)
+Lay_R(web, monolith)
+Lay_R(monolith, call_center)
+Lay_R(call_center, abs_client)
+Lay_R(abs_client, excel)
+Lay_R(monolith, bank_db)
+Lay_R(deposits, kafka)
+Lay_R(kafka, abs_adapter)
+Lay_R(internet_bank, messaging)
+Lay_R(messaging, abs)
+Lay_D(abs_client, abs_adapter)
+Lay_D(deposits, deposits_db)
+Lay_D(abs_adapter, abs_db)
+Lay_D(excel, mail)
+Lay_D(sms_gateway, telecom)
+
+' Общие пользователи и сохраняемые связи.
+Rel_D(customer, web, "I01 · Информация; MVP: каталог и заявка", "HTTPS")
+Rel_D(customer, monolith, "I01 · Операции клиента", "HTTPS")
+Rel_D(operator, call_center, "Консультация и обращения", "Web UI")
+Rel_D(frontoffice, abs_client, "Идентификация, депозит, документы", "Desktop UI")
+Rel_D(deposit_staff, abs_client, "Заявки и согласованная ставка", "Desktop UI")
+Rel_D(credit_staff, abs_client, "Риск; MVP: ведение базовых ставок", "Desktop UI")
+Rel_R(monolith, bank_db, "I04 · Профиль", "Защищённый SQL")
+Rel_D(abs_client, abs_db, "I12 · Операции сотрудников", "Oracle Net / PL/SQL")
+Rel(monolith, abs_db, "I14 · Платежи / текущие счета", "Сохраняемый прямой доступ")
+Rel_D(deposit_staff, excel, "Специальные ставки", "Ручная подготовка", $tags="manual")
+Rel_D(credit_staff, excel, "Базовые ставки", "Ручная подготовка", $tags="manual")
+Rel_D(sms_gateway, telecom, "I13 · Задания доставки", "Контракт оператора", $tags="delivery")
+Rel_U(telecom, customer, "I13 · Коды и уведомления", "СМС", $tags="delivery")
+
+' Текущие маршруты: заменяются в новом депозитном процессе, не дублируют его.
+Rel_D(call_center, abs, "Сейчас: обращение в АБС", "В MVP заменяется I10", $tags="current_only")
+Rel_D(abs, sms_gateway, "Сейчас: уведомление о ставке", "В MVP отправляет ABS3", $tags="current_only")
+BiRel_D(frontoffice, mail, "Сейчас: запрос ставки / условия", "Письма", $tags="current_only")
+BiRel_D(deposit_staff, mail, "Сейчас: запрос риска / ответ отделению", "Письма", $tags="current_only")
+BiRel_D(credit_staff, mail, "Сейчас: риск / рассылка ставок", "Письма и XLS", $tags="current_only")
+
+' Новые интеграции депозитного MVP.
+Rel_D(web, deposits, "I02 · Каталог и обращение", "HTTPS / JSON", $tags="mvp")
+Rel_D(monolith, deposits, "I03 · Клиент, заявка, код, статус", "HTTPS / JSON", $tags="mvp")
+Rel_D(deposits, deposits_db, "I05 · Заявки, проекции, учёт сообщений", "SQL / транзакция", $tags="mvp")
+BiRel_R(deposits, kafka, "I06 · Заявки, согласие → Kafka\nI07 · Ставки, счета, статусы → IB3", "Kafka / TLS", $tags="mvp_async")
+BiRel_R(kafka, abs_adapter, "I08 · Заявки → АБС\nСобытия, ACK → Kafka", "Kafka / TLS", $tags="mvp_async")
+BiRel_D(call_center, kafka, "I09 · Обращения, статусы → CC\nACK → Kafka", "Kafka / TLS", $tags="mvp_async")
+Rel_D(call_center, abs_adapter, "I10 · Обращение после звонка", "HTTPS / JSON; idempotency key", $tags="mvp")
+Rel_D(abs_adapter, abs_db, "I11 · PL/SQL и отправляемые сообщения", "JDBC / Oracle Net", $tags="mvp")
+Rel_D(deposits, sms_gateway, "I13 · Коды подтверждения", "Защищённый интерфейс", $tags="mvp")
+Rel_D(abs_adapter, sms_gateway, "I13 · Ставка и открытие", "Защищённый интерфейс", $tags="mvp_async")
+
+legend left
+|= Обозначение |= Значение |
+| <#28744C><color:white>Зелёный элемент</color> | Новый компонент депозитного MVP |
+| <#438DD5><color:white>Синий / серый элемент</color> | Существующая система или приложение; доработки указаны внутри |
+| <color:#555555>Серая связь</color> | Сохраняемое взаимодействие |
+| <color:#28744C>Зелёная связь</color> | Новое взаимодействие MVP; пунктир — асинхронное |
+| <color:#B16A00>Оранжевая точечная связь</color> | Текущий маршрут, заменяемый в депозитном MVP |
+endlegend
+
+footer Текущий процесс: существующие компоненты + серые и оранжевые связи. Депозитный MVP: существующие и новые компоненты; серые и зелёные связи.\nОранжевые маршруты не исполняются параллельно новым для одной заявки. За пределами депозитного MVP их использование уточняется.\nExcel заполняют сотрудники; автоматическая связь с АБС не предполагается. Точки входа текущих интеграций CC и SMS в АБС требуют обследования. I01–I14 описаны в ADR.
+@enduml

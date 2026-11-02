@@ -1,0 +1,54 @@
+@startuml rate-publication-components
+!include <C4/C4_Component>
+title Банк «Стандарт» — C4 Components · расширение общего адаптера АБС\nОбмен с сервисом депозитов и доставка ставок кол-центрам
+LAYOUT_TOP_DOWN()
+skinparam backgroundColor #FFFFFF
+skinparam linetype ortho
+skinparam nodesep 220
+skinparam ranksep 150
+skinparam padding 10
+skinparam ArrowFontSize 13
+skinparam maxMessageSize 280
+skinparam wrapWidth 260
+skinparam packageTitleAlignment left
+AddRelTag("async", $lineStyle=DashedLine())
+AddElementTag("extension", $bgColor="#28744C", $fontColor="#FFFFFF", $borderColor="#205F3E")
+
+Person(partner_operator, "Оператор партнёра", "Скачивает текущий файл; проверяет срок и читает ставки")
+Container(abs_client, "Клиент АБС", "Delphi", "Бэк-офисы: импорт XLS и утверждение; поддержка: журнал и повтор")
+ContainerDb(abs_db, "БД и бизнес-логика АБС", "Oracle / PL/SQL", "Утверждённые снимки, задания, история и статусы получателей")
+
+Container_Boundary(adapter, "Общий адаптер АБС · Java / Spring Boot") {
+    Component(coordinator, "Координатор публикации", "Java", "Чтение снимка; проверка актуальности; задания, повторы и контроль результатов. Ограничивает нагрузку Oracle")
+    Component(events, "Обмен событиями", "Java / Kafka client", "Изменения для сервиса депозитов; публичный каталог и подтверждения кол-центра")
+    Component(exporter, "Подготовка файлов", "Java · расширение адаптера", "Читаемый XLSX; версия, время сверки и отметка «Использовать до»", $tags="extension")
+    Component(delivery, "Доставка файлов", "Java / SFTP client · расширение адаптера", "Фоновая загрузка и атомарная замена текущего XLSX; учёт результата и повторы", $tags="extension")
+}
+
+ContainerQueue(kafka, "Брокер депозитного обмена", "Apache Kafka", "Ставки, контроль актуальности и подтверждения; только внутри банка")
+Container(deposits, "Сервис депозитов", "C# / поддерживаемый .NET", "Получает изменения ставок из АБС через общий адаптер и Kafka")
+Container(cc_backend, "Бэкенд кол-центра банка", "Java / Spring Boot", "Применяет каталог и подтверждает версию; детали — на отдельной схеме")
+Container(file_server, "SFTP-сервер банка", "Выделенный сетевой сегмент", "Текущий файл deposit-rates.xlsx; партнёру только чтение; журналирование и резервирование")
+Container(partner_client, "SFTP-клиент оператора", "Готовое настольное приложение", "Скачивание XLSX на рабочее место; оператор открывает файл в табличном редакторе")
+
+Lay_D(partner_operator, abs_client)
+Lay_R(abs_client, abs_db)
+Lay_R(abs_db, partner_client)
+Lay_R(events, exporter)
+Lay_R(kafka, file_server)
+Lay_R(deposits, cc_backend)
+
+Rel_D(partner_operator, partner_client, "UC03, UC06\nСкачивает файл", "Desktop UI")
+Rel_D(partner_client, file_server, "Текущий XLSX;\nтолько скачивание", "SFTP / ключ оператора")
+Rel_R(abs_client, abs_db, "UC01, UC05, UC06\nУсловия и журнал", "Oracle Net / PL-SQL")
+Rel_U(coordinator, abs_db, "Снимок и состояние обмена", "JDBC / ограниченный пул")
+Rel_D(coordinator, events, "Каталог и задания", "Вызов / результат")
+Rel_D(coordinator, exporter, "Публикация или сверка", "Вызов / результат")
+Rel_D(exporter, delivery, "Файлы и отметка актуальности", "Вызов / результат")
+BiRel_D(events, kafka, "Изменения АБС;\nпубличный каталог / подтверждения", "Kafka / TLS", $tags="async")
+Rel_D(kafka, deposits, "Сохраняемый маршрут:\nизменения ставок", "Kafka / TLS", $tags="async")
+BiRel_D(kafka, cc_backend, "Каталог / результат применения", "Kafka / TLS", $tags="async")
+Rel_D(delivery, file_server, "Публикует полный XLSX", "SFTP / ключ банка", $tags="async")
+
+footer Зелёные компоненты расширяют тот же адаптер АБС; все компоненты внутри рамки входят в один контейнер. Пунктир — фоновый обмен.\nОператор партнёра скачивает XLSX готовым клиентом, открывает его на рабочем месте и вручную проверяет срок использования.\nНа SFTP-сервере партнёру доступно только чтение. Файловые задания имеют отдельные лимиты; сбой SFTP не задерживает обмен с сервисом депозитов.
+@enduml
