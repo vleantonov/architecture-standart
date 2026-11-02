@@ -1,0 +1,39 @@
+@startuml call-center-catalog-components
+!include <C4/C4_Component>
+title Банк «Стандарт» — C4 Components · каталог кол-центра банка\nВнутренний кол-центр: ставки из Kafka сохраняются в PostgreSQL
+LAYOUT_TOP_DOWN()
+skinparam backgroundColor #FFFFFF
+skinparam linetype ortho
+skinparam nodesep 220
+skinparam ranksep 150
+skinparam padding 10
+skinparam ArrowFontSize 13
+skinparam maxMessageSize 280
+skinparam wrapWidth 260
+skinparam packageTitleAlignment left
+AddRelTag("async", $lineStyle=DashedLine())
+
+Person(operator, "Оператор кол-центра банка", "Находит и объясняет действующие условия")
+Container(frontend, "Веб-интерфейс кол-центра банка", "React.js", "Поиск, отметка актуальности, сообщение при задержке обновления")
+ContainerQueue(kafka, "Брокер депозитного обмена", "Apache Kafka", "Снимки, контроль актуальности и подтверждения")
+
+Container_Boundary(backend, "Бэкенд кол-центра банка · Java / Spring Boot") {
+    Component(consumer, "Приём и подтверждение ставок", "Java / Kafka client", "Проверка и фиксация целого снимка; подтверждение после сохранения; безопасные повторы")
+    Component(catalog_api, "API каталога", "Spring MVC", "Запрос условий и состояния каталога; права оператора")
+    Component(catalog, "Каталог и актуальность", "Java", "Поиск по параметрам и времени действия; проверка сверки источника; запрет устаревших ставок")
+}
+
+ContainerDb(database, "БД кол-центра банка", "PostgreSQL · инфраструктура банка", "Снимки из Kafka, активная версия, время сверки и подтверждения к отправке")
+
+Lay_R(operator, kafka)
+Lay_R(catalog_api, consumer)
+
+Rel_D(operator, frontend, "UC02 · Консультация", "HTTPS")
+Rel_D(frontend, catalog_api, "Параметры поиска", "HTTPS / JSON")
+BiRel_D(kafka, consumer, "UC04–UC05\nСтавки / подтверждения", "Kafka / TLS", $tags="async")
+Rel_D(catalog_api, catalog, "Условия и состояние", "Вызов / результат")
+Rel_D(catalog, database, "Снимок, версия, время сверки", "Защищённый SQL")
+Rel_D(consumer, database, "Снимок и учёт подтверждений", "SQL / транзакция")
+
+footer Схема относится к кол-центру банка. Потребитель записывает снимки из Kafka в PostgreSQL; API читает локальный каталог.\nПартнёр работает со скачанным XLSX через SFTP-клиент и показан на схеме публикации файлов. Пунктир — фоновые операции.\nПрименённый снимок и подтверждение сохраняются вместе. Повтор старой версии не заменяет новую и не продлевает актуальность.
+@enduml

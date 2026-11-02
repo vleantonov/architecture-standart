@@ -1,0 +1,52 @@
+@startuml deposit-mvp-context
+!include <C4/C4_Context>
+title Банк «Стандарт» — C4 Context · MVP\nКлиенты и сотрудники → онлайн-каналы → кол-центр и АБС → уведомления
+LAYOUT_TOP_DOWN()
+skinparam backgroundColor #FFFFFF
+skinparam linetype ortho
+skinparam nodesep 180
+skinparam ranksep 320
+skinparam padding 10
+skinparam ArrowFontSize 13
+skinparam maxMessageSize 280
+skinparam wrapWidth 260
+skinparam packageTitleAlignment left
+AddRelTag("async", $lineStyle=DashedLine())
+
+together {
+    Person(customer, "Клиент", "Новый — сайт и отделение; действующий — интернет-банк")
+    Person(operator, "Менеджер кол-центра", "Обратный звонок и предложение особых условий")
+    Person(staff, "Сотрудники АБС", "Отделение, депозитный и кредитный бэк-офисы")
+}
+
+System_Ext(web, "Сайт банка", "Публичный каталог; ФИО и телефон для обратного звонка")
+System(internet_bank, "Интернет-банк", "Депозитный процесс: каталог для обоих каналов, заявки, СМС-подтверждение и статусы")
+System_Ext(call_center, "Система кол-центра", "Обращения с сайта, консультация и предложение особых условий")
+System_Ext(abs, "АБС", "Ставки, согласование, идентификация, документы, открытие депозита и банковский учёт")
+System_Ext(sms_gateway, "СМС-шлюз", "Существующий канал кодов и уведомлений")
+System_Ext(telecom, "Телеком-оператор", "Внешняя доставка СМС клиенту")
+
+Lay_R(customer, operator)
+Lay_R(operator, staff)
+Lay_R(web, internet_bank)
+Lay_R(internet_bank, call_center)
+Lay_R(call_center, abs)
+Lay_D(sms_gateway, telecom)
+
+Rel_D(customer, web, "UC01–UC02 · Каталог и обращение", "HTTPS")
+Rel_D(customer, internet_bank, "UC01, UC04, UC07, UC09 · Заявка, код, статус", "HTTPS")
+Rel_D(operator, call_center, "UC02 · Звонок и особые условия", "Web UI")
+Rel_D(staff, abs, "UC03, UC05–UC07 · Ставки, документы, открытие", "Desktop UI")
+
+Rel_R(web, internet_bank, "UC01–UC02\nКаталог и обращение", "HTTPS / JSON")
+Rel_R(internet_bank, call_center, "UC02\nОбращение с сайта", "Асинхронный обмен", $tags="async")
+BiRel_R(internet_bank, abs, "UC04–UC07, UC09\nЗаявка, согласие → АБС\nСтавки, счета, статусы → ИБ", "Асинхронный обмен", $tags="async")
+BiRel_R(call_center, abs, "UC02, UC06, UC09\nОбращение → АБС\nСтатус → кол-центр", "HTTPS / события")
+
+Rel_D(internet_bank, sms_gateway, "UC04 / UC07 · Коды подтверждения", "Защищённый интерфейс шлюза")
+Rel_D(abs, sms_gateway, "UC08 · Ставка и факт открытия", "Фоновая отправка", $tags="async")
+Rel_D(sms_gateway, telecom, "Задания доставки", "Контракт оператора", $tags="async")
+Rel_U(telecom, customer, "Коды и уведомления", "СМС", $tags="async")
+
+footer Система в фокусе — интернет-банк с депозитным процессом; серые системы — его окружение, включая системы банка.\nСплошные связи — взаимодействие систем и пользователей; пунктир — асинхронная передача и доставка. Внутренние компоненты и Kafka раскрыты на контейнерной диаграмме.
+@enduml
